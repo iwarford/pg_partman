@@ -158,12 +158,11 @@ IF current_setting('server_version_num')::int > 100000 AND v_partition_type = 'n
    LOOP
    --    v_tg_before := (v_tg_list.tgtype::integer::bit(16) & 2::bit(16))::integer > 0;
 --       v_tg_before := (v_tg_list.tgtype::integer::bit(16) & 2::bit(16))::integer > 0;
-       v_sql := regexp_replace(regexp_replace(pg_get_triggerdef(tg.oid), '^create trigger [a-z0-9_]+', format('CREATE TRIGGER %I ', v_child_schema || '_' || v_child_tablename || nextval('partman.tg_naming_seq')), 'i'), 'ON [a-z\._0-9]+', format(' ON %I.%I ', v_child_schema, v_child_tablename), 'i');
+       v_sql := regexp_replace(regexp_replace(pg_get_triggerdef(tg.oid), '^create trigger [a-z0-9_]+', format('CREATE TRIGGER %I ', v_child_schema || '_' || v_child_tablename || nextval(@extschema@ || '.tg_naming_seq')), 'i'), 'ON [a-z\._0-9]+', format(' ON %I.%I ', v_child_schema, v_child_tablename), 'i');
         RAISE DEBUG 'Create TRIGGER: %', v_sql;
         EXECUTE v_sql;
    END LOOP;
 END IF;
-   v_template_oid
 
 RETURN true;
 
