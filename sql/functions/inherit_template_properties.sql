@@ -15,6 +15,9 @@ v_sql                   text;
 v_template_oid          oid;
 v_template_table        text;
 v_template_tablespace   text;
+v_partition_type        text;
+
+v_tg_before             smallint;
 
 BEGIN
 /*
@@ -22,8 +25,8 @@ BEGIN
  * Currently used for PostgreSQL 10 to inherit indexes and FKs since that is not natively available
  */
 
-SELECT parent_table, template_table, inherit_fk
-INTO v_parent_table, v_template_table, v_inherit_fk
+SELECT parent_table, template_table, inherit_fk, partition_type
+INTO v_parent_table, v_template_table, v_inherit_fk, v_partition_type
 FROM @extschema@.part_config
 WHERE parent_table = p_parent_table;
 IF v_parent_table IS NULL THEN
@@ -140,9 +143,29 @@ IF v_template_tablespace IS NOT NULL THEN
     RAISE DEBUG 'Alter tablespace: %', v_sql;
 END IF;
 
+--
+-- Trigger inheritence
+-- 
+IF current_setting('server_version_num')::int > 100000 AND v_partition_type = 'native' THEN
+   FOR v_tg_list IN
+       SELECT pg_get_triggerdef(tg.oid) AS trigger_def,
+              tg.tgtype AS tgtype
+       FROM pg_catalog.pg_trigger tg
+       JOIN pg_catalog.pg_class   c ON tg.tgrelid = c.oid
+       WHERE c.oid = v_template_oid
+       AND (tg.tgtype::integer::bit(16) & 1::bit(16) )::integer > 0  -- ROW level triggers only 
+       AND tg.tgisinternal = false
+   LOOP
+   --    v_tg_before := (v_tg_list.tgtype::integer::bit(16) & 2::bit(16))::integer > 0;
+--       v_tg_before := (v_tg_list.tgtype::integer::bit(16) & 2::bit(16))::integer > 0;
+       v_sql := regexp_replace(regexp_replace(pg_get_triggerdef(tg.oid), '^create trigger [a-z0-9_]+', format('CREATE TRIGGER %I ', v_child_schema || '_' || v_child_tablename || nextval('partman.tg_naming_seq')), 'i'), 'ON [a-z\._0-9]+', format(' ON %I.%I ', v_child_schema, v_child_tablename), 'i');
+        RAISE DEBUG 'Create TRIGGER: %', v_sql;
+        EXECUTE v_sql;
+   END LOOP;
+END IF;
+   v_template_oid
+
 RETURN true;
 
 END
 $$;
-
-
